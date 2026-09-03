@@ -1,0 +1,45 @@
+appId: pl.demolka.snippety
+productName: Snippety
+copyright: Copyright (c) 2026 Demolka183
+
+directories:
+  output: release
+  buildResources: resources
+
+files:
+  - out/**/*
+  - package.json
+
+# uiohook-napi dostarcza gotowe binarki N-API dla wszystkich platform.
+# Bez tego electron-builder probuje kompilowac je od zera i wymaga
+# Visual Studio Build Tools, ktorych do tego projektu nie potrzeba.
+npmRebuild: false
+
+# Pliki .node musza lezec poza archiwum asar - inaczej dlopen ich nie znajdzie.
+asarUnpack:
+  - "**/*.node"
+  - node_modules/uiohook-napi/**
+
+extraResources:
+  - from: resources/icon.png
+    to: icon.png
+
+win:
+  icon: resources/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Snippety
+  deleteAppDataOnUninstall: false
+
+portable:
+  artifactName: Snippety-${version}-portable.exe

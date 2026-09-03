@@ -1,0 +1,35 @@
+{
+  "name": "snippety",
+  "version": "0.1.0",
+  "description": "Lokalny menedzer snippetow z automatycznym rozwijaniem tekstu",
+  "main": "./out/main/index.js",
+  "author": "Demolka183",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && electron-vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "start": "electron-vite preview",
+    "dist": "npm run build && electron-builder --win --publish never",
+    "dist:dir": "npm run build && electron-builder --win --dir --publish never",
+    "test": "node tests/placeholders.test.mjs"
+  },
+  "dependencies": {
+    "uiohook-napi": "^1.5.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "5.1.4",
+    "electron": "^44.1.1",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.3.6"
+  }
+}
