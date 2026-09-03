@@ -14,6 +14,8 @@ import type { ExpansionEvent, FormRequest, Settings, Snippet } from '../../share
 import { TriggerIndex, TypingBuffer } from '../keyboard/buffer.js'
 import { classifyKey, isLockKey, type KeymapState } from '../keyboard/keymap.js'
 import { replaceTrigger } from '../keyboard/inject.js'
+import { describeForeground, restoreForeground } from '../keyboard/focus.js'
+import { log } from '../log.js'
 import { getSettings, listSnippets, recordUsage } from '../store/index.js'
 import { collectFields, render } from './placeholders.js'
 
@@ -73,7 +75,7 @@ export function stopEngine(): void {
   try {
     uIOhook.stop()
   } catch (err) {
-    console.error('[engine] blad przy zatrzymywaniu hooka:', err)
+    log('hook', 'blad przy zatrzymywaniu', err)
   }
   running = false
 }
@@ -173,13 +175,23 @@ async function runExpansion(
     const fields = collectFields(snippet.content)
     let values: Record<string, string> | undefined
 
+    log('expand', `trigger ${snippet.trigger}, pol: ${fields.length}, do skasowania: ${eraseCount}`)
+
     if (fields.length > 0) {
-      // Okno formularza zabiera focus aplikacji docelowej - oddajemy go po zamknieciu.
+      // Okno formularza zabiera focus aplikacji docelowej.
       const answered = await deps?.requestFields({ snippetName: snippet.name, fields })
-      if (!answered) return // anulowane: trigger zostaje w polu nietkniety
+      if (!answered) {
+        log('expand', 'formularz anulowany - trigger zostaje')
+        return
+      }
       values = answered
+      // Windows sam nie odda focusu wlasciwej aplikacji, jesli nasze okno
+      // glowne jest otwarte - musimy o to poprosic wprost.
+      restoreForeground()
       await sleep(REFOCUS_DELAY)
     }
+
+    log('expand', `wklejam do okna: ${describeForeground()}`)
 
     const rendered = render(snippet.content, { clipboard: await clipboard.readText(), values })
     const suffix = settings.keepTerminator ? terminator : ''
@@ -194,8 +206,9 @@ async function runExpansion(
 
     recordUsage(snippet.id)
     deps?.onExpanded({ snippetId: snippet.id, trigger: snippet.trigger, at: new Date().toISOString() })
+    log('expand', 'gotowe')
   } catch (err) {
-    console.error('[engine] rozwiniecie nie powiodlo sie:', err)
+    log('expand', 'rozwiniecie nie powiodlo sie', err)
   } finally {
     injecting = false
     buffer.reset()
@@ -223,8 +236,10 @@ export async function insertSnippetById(id: string): Promise<boolean> {
       values = answered
     }
 
-    // Zawsze czekamy - okno wyboru samo w sobie zabralo focus.
+    // Paleta zawsze zabiera focus, wiec zawsze go oddajemy.
+    restoreForeground()
     await sleep(REFOCUS_DELAY)
+    log('paleta', `wstawiam ${snippet.trigger} do okna: ${describeForeground()}`)
 
     const rendered = render(snippet.content, { clipboard: await clipboard.readText(), values })
     await replaceTrigger({
@@ -238,7 +253,7 @@ export async function insertSnippetById(id: string): Promise<boolean> {
     deps?.onExpanded({ snippetId: snippet.id, trigger: snippet.trigger, at: new Date().toISOString() })
     return true
   } catch (err) {
-    console.error('[engine] wstawienie z palety nie powiodlo sie:', err)
+    log('paleta', 'wstawienie nie powiodlo sie', err)
     return false
   } finally {
     injecting = false

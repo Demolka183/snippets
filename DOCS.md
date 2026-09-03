@@ -28,6 +28,7 @@ Aplikacja jest w całości lokalna. Nie ma serwera, konta ani synchronizacji.
 | **React 19 + TypeScript** | Trzy okna o zupełnie różnym charakterze; stan i tak trzeba czymś trzymać. |
 | **electron-vite 5** | Buduje trzy targety (main, preload, renderer) jedną konfiguracją, ma HMR w dev. |
 | **uiohook-napi 1.5.5** | Jedyna sensowna paczka dająca **jednocześnie** globalny hook (`WH_KEYBOARD_LL`) i wstrzykiwanie klawiszy (`SendInput`). Gotowe binarki N-API — bez kompilacji. |
+| **koffi** | FFI do Win32 (`user32.dll`). Potrzebne wylacznie do zarzadzania pierwszym planem okien - patrz 4.6. Binarka pobierana tylko dla biezacej platformy. |
 | **Pliki JSON** | Baza ma rozmiar kilkudziesięciu kB. SQLite wymagałby kompilacji natywnej i niczego by nie dał. JSON jest czytelny, wersjonowalny i gotowy do przeniesienia na Androida. |
 
 ### Przypięte wersje — nie ruszać osobno
@@ -49,9 +50,11 @@ src/
 │   ├── windows.ts          Trzy okna: manager, palette, form
 │   ├── ipc.ts              Wszystkie kanały IPC
 │   ├── system.ts           Zasobnik, autostart, globalny skrót
+│   ├── log.ts              Log diagnostyczny do pliku
 │   ├── keyboard/
 │   │   ├── keymap.ts       Kod klawisza (scancode) → znak
 │   │   ├── buffer.ts       Bufor wpisanego tekstu + indeks triggerów
+│   │   ├── focus.ts        Win32: przejmowanie i oddawanie pierwszego planu
 │   │   └── inject.ts       Backspace, wklejanie przez schowek, ruch karetki
 │   ├── expansion/
 │   │   ├── placeholders.ts Parser i renderer {{...}}
@@ -75,7 +78,8 @@ src/
 scripts/
 └── make-icons.mjs          Generator icon.png i icon.ico
 tests/
-└── placeholders.test.mjs   Testy parsera (npm test)
+├── placeholders.test.mjs   Testy parsera (npm test)
+└── e2e.cjs                 Test end-to-end: pisze do Notatnika i czyta wynik
 ```
 
 ---
@@ -149,12 +153,39 @@ syntetyczne klawisze wróciłyby do bufora i pętla by się zapętliła.
 Jeśli treść zawiera `{{pole:...}}`, `{{obszar:...}}` lub `{{wybor:...}}`, przed
 podmianą otwiera się okno formularza. Sekwencja:
 
-1. Okno formularza dostaje focus (zabierając go aplikacji docelowej).
-2. Użytkownik wypełnia, Enter zatwierdza / Escape anuluje.
-3. Okno się **chowa** (nie zamyka) — Windows oddaje focus poprzedniej aplikacji.
-4. Czekamy `REFOCUS_DELAY` (220 ms), dopiero potem kasujemy trigger i wklejamy.
+1. `rememberForeground()` zapamiętuje okno, w którym użytkownik pisał.
+2. Okno formularza się pokazuje i **wymusza** sobie pierwszy plan (4.6).
+3. Użytkownik wypełnia, Enter zatwierdza / Escape anuluje.
+4. Okno się **chowa** (nie zamyka).
+5. `restoreForeground()` jawnie przywraca zapamiętane okno.
+6. Czekamy `REFOCUS_DELAY` (220 ms), dopiero potem kasujemy trigger i wklejamy.
 
 Anulowanie zostawia trigger w polu nietknięty.
+
+### 4.6 Pierwszy plan okien — dlaczego to nie jest trywialne
+
+Windows przyznaje prawo do zmiany okna pierwszoplanowego tylko procesowi, który
+**dostał ostatnie zdarzenie wejścia**. Nasz proces czyta klawiaturę biernie
+z hooka i nigdy takim procesem nie jest. Wynikały z tego dwa osobne błędy,
+oba naprawione w `keyboard/focus.ts`:
+
+**a) Okno formularza nie dostawało focusu klawiatury.** `win.show()` +
+`win.focus()` pokazywało okno, ale wpisywany tekst leciał do aplikacji pod
+spodem. Formularz dało się wypełnić tylko klikając w pole myszą.
+Naprawa: `forceFocusOwnWindow()`.
+
+**b) Po schowaniu okna pierwszy plan zostawał na schowanym oknie.**
+Zmierzone: `GetForegroundWindow()` po `win.hide()` nadal zwracał nasze — już
+niewidoczne — okno. Backspace'y i Ctrl+V szły więc donikąd i **nic się nie
+wklejało**. Naprawa: `restoreForeground()`.
+
+Obie funkcje działają tak samo: próbują `SetForegroundWindow`, a gdy system
+odmówi, przypinają wejście naszego wątku do wątku okna aktualnie
+pierwszoplanowego przez `AttachThreadInput` i próbują ponownie. To
+udokumentowane obejście blokady.
+
+**To jedyne miejsce w projekcie wołające Win32.** Poza Windows wszystkie
+funkcje są cichymi no-opami.
 
 ---
 
@@ -258,14 +289,28 @@ pod rogami widać byłoby prostokątne tło okna.
 ## 9. Budowanie
 
 ```bash
-npm install          # instalacja (patrz pułapka 10.1)
-npm run dev          # tryb deweloperski z HMR
-npm test             # testy parsera placeholderów
-npm run typecheck    # tsc bez emisji, oba projekty
-npm run build        # typecheck + bundle do out/
-npm run dist         # build + instalator NSIS i wersja portable do release/
+npm install               # instalacja (patrz pułapka 10.1)
+npm run dev               # tryb deweloperski z HMR
+npm test                  # testy parsera placeholderów
+npm run test:e2e          # test end-to-end na wersji ze źródeł
+npm run test:e2e:packaged # test end-to-end na release/win-unpacked
+npm run typecheck         # tsc bez emisji, oba projekty
+npm run build             # typecheck + bundle do out/
+npm run dist              # build + instalator NSIS i portable do release/
+npm run dist:dir          # sam katalog release/win-unpacked, bez instalatora
 node scripts/make-icons.mjs   # regeneracja ikon
 ```
+
+### Test end-to-end
+
+`npm run test:e2e` uruchamia aplikację, otwiera Notatnik, **wpisuje w niego
+triggery prawdziwymi zdarzeniami klawiatury** i odczytuje wynik przez schowek.
+Sprawdza całą ścieżkę: hook, bufor, dopasowanie, formularz pól, powrót focusu
+i wklejenie. Na czas testu przejmuje klawiaturę — nie pisz nic w tym czasie.
+
+Wynik ląduje w `tests/e2e-wynik.txt` razem z logiem aplikacji.
+Wariant `:packaged` sprawdza dodatkowo, czy binarki natywne poprawnie wyszły
+poza archiwum `asar` — tego nie da się wykryć w trybie deweloperskim.
 
 `electron-builder.yml` ma `npmRebuild: false` — `uiohook-napi` dostarcza gotowe
 binarki N-API i nie wymaga przebudowy pod ABI Electrona. Pliki `.node` są
@@ -284,17 +329,24 @@ a `npm start` kończy się `Error: Electron uninstall`.
 
 Naprawa: `node node_modules/electron/install.js`
 
-### 10.2 Schowek w Electronie 44 jest asynchroniczny
+### 10.2 `console.log` z procesu głównego nie dociera do stdout
+
+Na Windows Electron nie podpina stdout procesu głównego do rodzica — `console.log`
+i `console.error` po prostu znikają. Dlatego diagnostyka idzie do pliku
+`%APPDATA%/snippety/log.txt` przez `src/main/log.ts`. Przy debugowaniu czytaj
+ten plik, nie konsolę.
+
+### 10.3 Schowek w Electronie 44 jest asynchroniczny
 
 `clipboard.readText()` zwraca `Promise<string>`, `clipboard.writeText()` zwraca
 `Promise<void>`. Nie ma wariantu synchronicznego. Starsze przykłady z sieci
 (i pamięć modeli) pokazują wersję synchroniczną — nie działa.
 
-### 10.3 Triggery tylko ASCII
+### 10.4 Triggery tylko ASCII
 
 Patrz 4.2. Polskie znaki w triggerze nie zadziałają. W treści snippetu — tak.
 
-### 10.4 CapsLock po starcie aplikacji
+### 10.5 CapsLock po starcie aplikacji
 
 Stan CapsLocka jest śledzony od momentu startu aplikacji przez przechwytywanie
 jego naciśnięć. Jeśli CapsLock był włączony **zanim** aplikacja wstała,
@@ -302,14 +354,15 @@ jego naciśnięć. Jeśli CapsLock był włączony **zanim** aplikacja wstała,
 Dotyczy tylko triggerów z `matchCase: true` — domyślnie wielkość liter nie ma
 znaczenia, więc problem się nie ujawnia.
 
-### 10.5 Formularz pól a focus
+### 10.6 Formularz pól a focus
 
-Otwarcie okna formularza zabiera focus aplikacji docelowej. Po zamknięciu
-czekamy 220 ms (`REFOCUS_DELAY` w `engine.ts`), zanim wkleimy tekst. Przy
-wolniejszych maszynach albo aplikacjach z własnym zarządzaniem focusem ta
-wartość może wymagać podniesienia.
+Mechanizm opisany w 4.6. Jeśli mimo to tekst trafia w złe miejsce, podnieś
+`REFOCUS_DELAY` w `engine.ts` (domyślnie 220 ms) — na wolniejszych maszynach
+i w aplikacjach z własnym zarządzaniem focusem system potrzebuje więcej czasu.
+Log w `%APPDATA%/snippety/log.txt` pokazuje wprost, do którego okna poszło
+wklejenie.
 
-### 10.6 Spacja w ścieżce projektu
+### 10.7 Spacja w ścieżce projektu
 
 Katalog nazywa się `Aplikacja snippety`. Część narzędzi CLI (node-gyp,
 niektóre skrypty npm) źle znosi spacje w ścieżce. Jeśli coś się wywala
@@ -319,7 +372,7 @@ w nietypowy sposób, to jest pierwszy podejrzany.
 
 ## 11. Stan projektu
 
-**Wersja 0.1.0.** Działa: rozwijanie triggerów w dwóch trybach, placeholdery
+**Wersja 0.1.1.** Działa: rozwijanie triggerów w dwóch trybach, placeholdery
 z datami i schowkiem, pola do wypełnienia (tekst / wieloliniowe / lista),
 znacznik kursora, okno szybkiego wyboru, foldery, zasobnik, autostart,
 eksport i import, instalator NSIS + wersja portable.
@@ -327,10 +380,12 @@ eksport i import, instalator NSIS + wersja portable.
 Zweryfikowane w tej wersji:
 
 - parser placeholderów — 29 testów, `npm test`
+- **rozwijanie end-to-end w Notatniku** — `npm run test:e2e`, trzy przypadki:
+  prosty trigger, znacznik kursora, formularz pól z powrotem focusu
+- to samo na wersji spakowanej — `npm run test:e2e:packaged`
 - start i zatrzymanie hooka klawiatury bez wycieku procesu
 - wygląd wszystkich trzech okien
 - build produkcyjny i typecheck bez błędów
 
-**Nie zweryfikowane na żywym systemie** (wymaga człowieka przy klawiaturze):
-faktyczna podmiana tekstu w Wordzie/Teams/przeglądarce, dobór opóźnień
-w `inject.ts`, powrót focusu po formularzu. Patrz `TODO.md`.
+**Nie zweryfikowane**: zachowanie w aplikacjach z własną obsługą wejścia
+(Teams, Outlook, Word, przeglądarka) i okno szybkiego wyboru. Patrz `TODO.md`.

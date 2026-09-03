@@ -15,6 +15,8 @@ import { BrowserWindow, screen, shell } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { FormRequest } from '../shared/types.js'
+import { forceFocusOwnWindow, rememberForeground } from './keyboard/focus.js'
+import { log } from './log.js'
 
 const dirname = path.dirname(fileURLToPath(import.meta.url))
 const preloadPath = path.join(dirname, '../preload/index.mjs')
@@ -149,9 +151,12 @@ export function togglePalette(): void {
     y: Math.round(y + height * 0.22),
     ...PALETTE_SIZE
   })
+  // Zanim zaslonimy aplikacje uzytkownika, zapamietujemy do czego wrocic.
+  rememberForeground()
   win.webContents.send('palette:opened')
   win.show()
   win.focus()
+  forceFocusOwnWindow(win.getNativeWindowHandle())
 }
 
 export function hidePalette(): void {
@@ -193,6 +198,7 @@ export function requestFields(request: FormRequest): Promise<Record<string, stri
       webPreferences: baseWebPreferences
     })
     formWindow.on('closed', () => {
+      log('form', 'okno formularza zostalo zniszczone')
       formWindow = null
       pendingForm?.(null)
       pendingForm = null
@@ -212,18 +218,25 @@ export function requestFields(request: FormRequest): Promise<Record<string, stri
     height
   })
 
+  rememberForeground()
+
   return new Promise((resolve) => {
     pendingForm = resolve
-    const send = (): void => win.webContents.send('form:request', request)
+    const send = (): void => {
+      log('form', `wysylam zadanie: ${request.fields.length} pol`)
+      win.webContents.send('form:request', request)
+    }
     if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send)
     else send()
     win.show()
     win.focus()
+    forceFocusOwnWindow(win.getNativeWindowHandle())
   })
 }
 
 /** Wolane z IPC po zatwierdzeniu lub anulowaniu formularza. */
 export function resolveForm(values: Record<string, string> | null): void {
+  log('form', values ? `zatwierdzono, pol: ${Object.keys(values).length}` : 'anulowano')
   formWindow?.hide()
   const resolve = pendingForm
   pendingForm = null

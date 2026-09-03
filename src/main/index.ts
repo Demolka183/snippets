@@ -9,6 +9,7 @@
 import { app, BrowserWindow } from 'electron'
 import { startEngine, stopEngine } from './expansion/engine.js'
 import { registerIpc } from './ipc.js'
+import { initLog, log } from './log.js'
 import { getSettings, flushStores, initStores } from './store/index.js'
 import {
   applyAutostart,
@@ -37,6 +38,7 @@ if (!app.requestSingleInstanceLock()) {
 async function bootstrap(): Promise<void> {
   await app.whenReady()
 
+  initLog()
   initStores()
   registerIpc()
 
@@ -50,6 +52,8 @@ async function bootstrap(): Promise<void> {
     isOwnWindowFocused,
     onExpanded: (event) => broadcast('expansion:done', event)
   })
+
+  log('start', `hook wystartowal, skrot palety: ${settings.paletteHotkey}`)
 
   if (!settings.startMinimized && !launchedHidden()) showManager()
 

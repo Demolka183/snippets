@@ -8,46 +8,58 @@ wiedzieć, że to już sprawdzone.
 
 ## 1. Do zrobienia przy najbliższej okazji
 
-### 1.1 Test na żywym systemie — PRIORYTET
+### 1.1 Test w aplikacjach z własną obsługą wejścia
 
-Kod nie był ani razu przetestowany z człowiekiem przy klawiaturze. Automat nie
-jest w stanie tego sprawdzić: podmiana tekstu wymaga faktycznego wpisywania
-w cudzej aplikacji. Do przejścia:
+Notatnik jest pokryty automatem (`npm run test:e2e`). Zostają aplikacje, które
+same zarządzają wejściem i focusem — tam mechanizm ze schowka i przywracaniem
+pierwszego planu może zachować się inaczej:
 
-- [ ] Wpisać `/data` w Notatniku → ma się zamienić na dzisiejszą datę.
-- [ ] To samo w przeglądarce (pole tekstowe), Outlooku, Teams i Wordzie.
-- [ ] `/przywitanie` → sprawdzić, czy kursor ląduje w pustej linii (`{{kursor}}`).
-- [ ] `/oferta` → formularz pól, wypełnić, sprawdzić czy tekst trafia we właściwe
-      miejsce **i czy focus wraca** do aplikacji docelowej.
+- [ ] Outlook — pole treści maila.
+- [ ] Teams — pole czatu.
+- [ ] Word.
+- [ ] Przeglądarka — zwykłe `<input>` i edytor typu Gmail.
+- [ ] `Ctrl+Shift+Space` → okno szybkiego wyboru, wstawienie strzałkami i Enterem
+      (paleta używa tej samej ścieżki focusu co formularz, ale nie jest objęta
+      testem automatycznym).
 - [ ] Sprawdzić, czy schowek wraca do poprzedniej zawartości po wklejeniu.
-- [ ] `Ctrl+Shift+Space` → okno szybkiego wyboru, wstawienie strzałkami i Enterem.
 
-Jeśli tekst trafia w złe miejsce albo gubią się znaki — pierwsze do ruszenia są
-stałe `DELAY` w `src/main/keyboard/inject.ts` i `REFOCUS_DELAY` w
-`src/main/expansion/engine.ts`.
+Diagnostyka: `%APPDATA%/snippety/log.txt` pokazuje wprost, do którego okna
+poszło wklejenie. Jeśli tekst trafia w złe miejsce — podnieś `REFOCUS_DELAY`
+w `src/main/expansion/engine.ts`. Jeśli gubią się znaki — stałe `DELAY`
+w `src/main/keyboard/inject.ts`.
 
-### 1.2 Cofnięcie rozwinięcia
+### 1.2 Test automatyczny obejmuje tylko Notatnik
+
+`tests/e2e.cjs` czyta wynik przez Ctrl+A / Ctrl+C i schowek, więc działa
+z dowolnym polem tekstowym — ale celuje w Notatnik po klasie okna `Notepad`.
+Rozszerzenie na WordPad albo przeglądarkę to zmiana jednej funkcji
+(`FindWindowW`). Warto, gdy pojawi się błąd specyficzny dla jakiejś aplikacji.
+
+### 1.3 Cofnięcie rozwinięcia
 
 Nie ma sposobu, żeby cofnąć niechcianą podmianę inaczej niż ręcznie. Natywny
 `Ctrl+Z` w aplikacji docelowej zwykle cofa całe wklejenie na raz, ale nie
 przywraca skasowanego triggera. Do rozważenia: przechwycenie `Ctrl+Z` tuż po
 rozwinięciu i odtworzenie stanu sprzed.
 
-### 1.3 Wyłączanie w wybranych aplikacjach
+### 1.4 Wyłączanie w wybranych aplikacjach
 
 Ustawienie `excludedApps` było zaprojektowane, ale **świadomie nie weszło do
 v1** — wymaga odczytu procesu aktywnego okna, czego Electron nie udostępnia.
-Opcje: dociągnięcie natywnego wywołania `GetForegroundWindow` +
-`GetWindowThreadProcessId` albo cache'owane odpytywanie PowerShella. Sensowne
-dopiero, gdy okaże się realnie potrzebne (np. rozwijanie przeszkadza w RDP
-albo w grach).
+**Od wersji 0.1.1 jest to znacznie prostsze**: `src/main/keyboard/focus.ts`
+woła już `GetForegroundWindow` i `GetWindowThreadProcessId` przez koffi.
+Brakuje tylko odczytu nazwy procesu (`QueryFullProcessImageNameW`) i filtra
+w `engine.ts`. Sensowne, gdy okaże się realnie potrzebne — np. rozwijanie
+przeszkadza w RDP albo w grach.
 
-### 1.4 Rozmiar paczki
+### 1.5 Rozmiar paczki
 
-Instalator waży 111 MB. `uiohook-napi` wnosi prebuildy dla **wszystkich**
+Instalator waży ok. 111 MB. `uiohook-napi` wnosi prebuildy dla **wszystkich**
 platform (darwin, linux, win32-arm64), z czego używamy jednej. Filtr w
 `electron-builder.yml` na `prebuilds/win32-x64/**` utnie kilka MB. Reszta to
 Electron i tego nie da się obejść bez zmiany stacku.
+
+(koffi tego problemu nie ma — instaluje binarkę tylko dla bieżącej platformy.)
 
 ---
 
@@ -73,11 +85,12 @@ typu `/zażółć`.
 `keymap` się myli. Ujawnia się tylko przy `matchCase: true`. Naprawa wymaga
 odczytu stanu klawisza z systemu przy starcie.
 
-### 2.4 Brak testów poza parserem
+### 2.4 Brak testów jednostkowych dla bufora i mapy klawiszy
 
-`npm test` pokrywa tylko `placeholders.ts` (29 asercji). `buffer.ts`
-(dopasowanie triggerów, granica słowa, najdłuższe dopasowanie) i `keymap.ts`
-(klasyfikacja klawiszy) to czysta logika i **dają się testować bez Electrona** —
+`npm test` pokrywa `placeholders.ts` (29 asercji), `npm run test:e2e` pokrywa
+całą ścieżkę end-to-end. Nie ma natomiast testów jednostkowych `buffer.ts`
+(dopasowanie triggerów, granica słowa, najdłuższe dopasowanie) ani `keymap.ts`
+(klasyfikacja klawiszy). To czysta logika, **daje się testować bez Electrona** —
 warto dopisać, bo to właśnie tam siedzą błędy, które kasują użytkownikowi tekst.
 
 ### 2.5 Bundle renderera 554 kB
@@ -107,7 +120,32 @@ otwieranie palety okaże się zauważalnie wolne.
 
 ## 4. Zweryfikowane
 
-Wersja 0.1.0, sprawdzone automatycznie:
+### Wersja 0.1.1 — naprawa pierwszego planu okien
+
+Zgłoszony objaw: po wypełnieniu formularza `/oferta` **nic się nie wklejało**.
+Diagnoza z pomiarów (`tests/e2e.cjs` + log aplikacji) wykazała **dwa niezależne
+błędy**, oba wynikające z tego, że Windows blokuje zmianę okna pierwszoplanowego
+procesom, które nie dostały ostatniego zdarzenia wejścia:
+
+1. **Okno formularza nie dostawało focusu klawiatury.** `win.show()` +
+   `win.focus()` pokazywało okno, ale wpisywany tekst leciał do aplikacji pod
+   spodem. Formularz dawał się wypełnić wyłącznie kliknięciem myszą.
+2. **Po `win.hide()` pierwszy plan zostawał na schowanym oknie.** Zmierzone:
+   `GetForegroundWindow()` zwracał nasze niewidoczne okno. Backspace'y i Ctrl+V
+   szły donikąd — stąd „nic się nie wkleja”.
+
+Naprawione w `src/main/keyboard/focus.ts` (`forceFocusOwnWindow`
+i `restoreForeground`). Szczegóły w `DOCS.md` 4.6.
+
+Sprawdzone automatycznie, na wersji ze źródeł **i na spakowanej**:
+
+- `/data` → poprawna data w Notatniku
+- `/przywitanie` → poprawny tekst, znacznik kursora zdjęty
+- `/oferta` → formularz wypełniony z klawiatury, wartości podstawione,
+  `{{data:+14}}` policzone, focus wrócił do Notatnika
+- koffi ładuje się w Electronie 44 i poprawnie wychodzi poza archiwum `asar`
+
+### Wersja 0.1.0, sprawdzone automatycznie:
 
 - **Parser placeholderów** — 29 asercji w `tests/placeholders.test.mjs`: formaty
   dat, przesunięcia dni, aliasy angielskie, scalanie powtórzonych pól, pozycja

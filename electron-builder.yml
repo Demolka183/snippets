@@ -19,6 +19,8 @@ npmRebuild: false
 asarUnpack:
   - "**/*.node"
   - node_modules/uiohook-napi/**
+  - node_modules/koffi/**
+  - node_modules/@koromix/**
 
 extraResources:
   - from: resources/icon.png
@@ -33,6 +35,7 @@ win:
       arch: [x64]
 
 nsis:
+  artifactName: Snippety-Setup-${version}.${ext}
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true

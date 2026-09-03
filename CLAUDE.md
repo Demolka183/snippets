@@ -20,7 +20,12 @@ Bieżące zadania i dług: **`TODO.md`**.
 - **Schowek w Electronie 44 jest asynchroniczny.** `clipboard.readText()` zwraca
   `Promise<string>`, nie `string`. Twoja wiedza z treningu jest tu nieaktualna —
   przy każdym użyciu API Electrona sprawdzaj sygnaturę w `node_modules/electron/electron.d.ts`.
+- **`koffi`** — FFI do Win32, używane wyłącznie w `src/main/keyboard/focus.ts`
+  do zarządzania pierwszym planem okien. Binarka tylko dla bieżącej platformy.
 - **Dane w plikach JSON** w `%APPDATA%/snippety/`. Żadnej bazy, żadnej chmury.
+- **`console.log` w procesie głównym nie działa.** Electron na Windows nie
+  podpina stdout do rodzica — komunikaty znikają. Diagnostykę pisz przez
+  `log()` z `src/main/log.ts`, czytaj z `%APPDATA%/snippety/log.txt`.
 
 ## Zasady pracy
 
@@ -46,6 +51,9 @@ Bieżące zadania i dług: **`TODO.md`**.
    Jest ładowany po obu stronach mostka.
 4. **Cały stan bufora klawiatury żyje w `src/main/expansion/engine.ts`** i nigdzie
    indziej. Nie duplikuj go w innych modułach.
+5. **`src/main/keyboard/focus.ts` jest jedynym miejscem wołającym Win32.**
+   Jeśli potrzebujesz kolejnej funkcji z `user32.dll`, dodaj ją tam, a nie
+   rozsiewaj `koffi.load()` po projekcie. Poza Windows moduł ma być no-opem.
 
 ## Rozwijanie tekstu — zasada twarda
 
@@ -57,6 +65,27 @@ asymetria decyduje o każdym sporze projektowym w `engine.ts` i `keymap.ts`.
 
 Praktycznie: każdy klawisz przesuwający karetkę (Enter, Tab, strzałki, Home/End,
 Delete), każde kliknięcie myszą i każdy skrót z Ctrl/Alt czyszczą bufor.
+
+## Focus okien — zasada twarda
+
+**Nigdy nie zakładaj, że `win.show()`, `win.focus()` czy `win.hide()` ustawiły
+pierwszy plan tam, gdzie chcesz.** Windows blokuje zmianę pierwszego planu
+procesom działającym w tle, a nasz proces zawsze taki jest. Każde okno, które
+zabiera focus użytkownikowi, musi:
+
+1. przed pokazaniem wywołać `rememberForeground()`,
+2. po pokazaniu wywołać `forceFocusOwnWindow(win.getNativeWindowHandle())`,
+3. po schowaniu wywołać `restoreForeground()`.
+
+Pominięcie któregokolwiek kroku daje błąd, który wygląda jak „aplikacja nic nie
+robi”. Historia i pomiary w `DOCS.md` 4.6.
+
+## Weryfikacja zmian w rozwijaniu
+
+Zmieniłeś cokolwiek w `keyboard/`, `expansion/` albo w oknach? **Uruchom
+`npm run test:e2e`.** Test wpisuje triggery prawdziwymi zdarzeniami klawiatury
+do Notatnika i czyta wynik — to jedyny sposób, żeby sprawdzić, czy podmiana
+faktycznie działa. Typecheck i testy parsera tego nie wyłapią.
 
 ## Języki i teksty
 

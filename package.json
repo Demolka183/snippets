@@ -1,6 +1,6 @@
 {
   "name": "snippety",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Lokalny menedzer snippetow z automatycznym rozwijaniem tekstu",
   "main": "./out/main/index.js",
   "author": "Demolka183",
@@ -14,9 +14,12 @@
     "start": "electron-vite preview",
     "dist": "npm run build && electron-builder --win --publish never",
     "dist:dir": "npm run build && electron-builder --win --dir --publish never",
-    "test": "node tests/placeholders.test.mjs"
+    "test": "node tests/placeholders.test.mjs",
+    "test:e2e": "node tests/e2e.cjs tests/e2e-wynik.txt",
+    "test:e2e:packaged": "node tests/e2e.cjs tests/e2e-wynik.txt --packaged"
   },
   "dependencies": {
+    "koffi": "^3.2.0",
     "uiohook-napi": "^1.5.5"
   },
   "devDependencies": {
