@@ -9,6 +9,7 @@
 import { app, globalShortcut, Menu, nativeImage, Tray } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { log } from './log.js'
 import { getSettings, updateSettings } from './store/index.js'
 import { broadcast, showManager, togglePalette } from './windows.js'
 
@@ -95,7 +96,7 @@ export function applyPaletteHotkey(accelerator: string): boolean {
     if (ok) currentHotkey = accelerator
     return ok
   } catch (err) {
-    console.error('[system] nie udalo sie zarejestrowac skrotu:', err)
+    log('system', `nie udalo sie zarejestrowac skrotu ${accelerator}`, err)
     return false
   }
 }

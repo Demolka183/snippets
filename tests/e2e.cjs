@@ -118,6 +118,23 @@ const APP_DIR = path.join(__dirname, '..')
 let appProc = null
 let notepadProc = null
 
+/** Czy dziala jakas instancja aplikacji poza ta, ktora uruchomil test. */
+function foreignInstanceRunning() {
+  try {
+    const out = execFileSync('tasklist', ['/FI', 'IMAGENAME eq Snippety.exe', '/NH'], { encoding: 'utf8' })
+    return out.includes('Snippety.exe')
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Sprzata WYLACZNIE po sobie.
+ *
+ * Wczesniejsza wersja robila `taskkill /IM Snippety.exe /F`, czyli ubijala tez
+ * instancje uzytkownika - bez `before-quit`, a wiec bez zapisu bazy. Skonczylo
+ * sie utrata swiezo dodanego snippetu. Zabijamy tylko wlasne drzewo procesow.
+ */
 function cleanup() {
   try {
     uIOhook.stop()
@@ -125,17 +142,26 @@ function cleanup() {
   try {
     execFileSync('taskkill', ['/IM', 'notepad.exe', '/F'], { stdio: 'ignore' })
   } catch {}
-  try {
-    execFileSync('taskkill', ['/IM', 'electron.exe', '/F'], { stdio: 'ignore' })
-  } catch {}
-  try {
-    execFileSync('taskkill', ['/IM', 'Snippety.exe', '/F'], { stdio: 'ignore' })
-  } catch {}
+  if (appProc && appProc.pid) {
+    try {
+      execFileSync('taskkill', ['/PID', String(appProc.pid), '/T', '/F'], { stdio: 'ignore' })
+    } catch {}
+  }
 }
 
 async function main() {
   say('=== TEST E2E ROZWIJANIA TEKSTU ===')
   say('(dane testowe w tests/.tmp-userdata - prawdziwa baza nie jest ruszana)')
+
+  // Blokada jednej instancji sprawilaby, ze test steruje aplikacja uzytkownika
+  // zamiast wlasna - a wyniki bylyby falszywe. Lepiej nie zaczynac.
+  if (foreignInstanceRunning()) {
+    say('')
+    say('BLAD: Snippety juz dziala.')
+    say('Zamknij aplikacje (ikona w zasobniku -> Zakoncz) i uruchom test ponownie.')
+    say('Test nie ubija cudzych instancji, zeby nie stracic niezapisanych danych.')
+    return
+  }
 
   // Osobny katalog danych na czas testu. Bez tego test kasowalby prawdziwa
   // baze snippetow uzytkownika - a to jest jego jedyna kopia.

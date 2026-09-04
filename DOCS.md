@@ -241,13 +241,30 @@ Katalog: `%APPDATA%/snippety/`
 | `settings.json` | ustawienia |
 | `*.bak` | poprzednia wersja, tworzona przy każdym zapisie |
 
-Zapis jest **atomowy**: plik tymczasowy → kopia poprzedniej wersji do `.bak` →
-`rename`. Aplikacja działa w tle i bywa ubijana razem z sesją Windows; zwykły
-zapis w miejscu zostawiłby ucięty plik. Odczyt przy uszkodzonym pliku głównym
-sięga po `.bak`, a dopiero potem po wartości domyślne.
+Zapis jest **atomowy**: plik tymczasowy → weryfikacja rozmiaru → kopia
+poprzedniej wersji do `.bak` → `rename`. Aplikacja działa w tle i bywa ubijana
+razem z sesją Windows; zwykły zapis w miejscu zostawiłby ucięty plik. Odczyt
+przy uszkodzonym pliku głównym sięga po `.bak`, a dopiero potem po wartości
+domyślne.
 
 Zapisy są zbierane przez 400 ms (`SAVE_DEBOUNCE`) i wykonywane raz.
 `flushStores()` przy zamykaniu aplikacji wymusza natychmiastowy zapis.
+**Ubicie procesu siłowo** (Menedżer zadań, `taskkill /F`) pomija `before-quit`,
+więc traci zmiany z ostatnich ~400 ms.
+
+### 6.1 Awaria zapisu musi zostawić ślad
+
+Błąd zapisu bazy to po prostu utracone snippety użytkownika. Dlatego:
+
+- niepowodzenie idzie do `log.txt` przez `log()`, nigdy do `console.error`
+  (patrz pułapka 10.2 — na Windows to znika bez śladu),
+- rozmiar zapisanego pliku tymczasowego jest **porównywany z oczekiwanym**;
+  niepełny zapis nie podmienia działającego pliku,
+- niedokończony `.tmp` jest kasowany, żeby nie zmylił następnego zapisu,
+- przy starcie, gdy `.bak` okazuje się **nowszy** od pliku głównego, do logu
+  trafia ostrzeżenie. To znaczy, że poprzedni zapis się nie dokończył albo ktoś
+  podmienił plik pod działającą aplikacją. Aplikacja **nie naprawia tego sama** —
+  dane użytkownika to nie miejsce na zgadywanie.
 
 ---
 
@@ -372,7 +389,7 @@ w nietypowy sposób, to jest pierwszy podejrzany.
 
 ## 11. Stan projektu
 
-**Wersja 0.1.1.** Działa: rozwijanie triggerów w dwóch trybach, placeholdery
+**Wersja 0.1.2.** Działa: rozwijanie triggerów w dwóch trybach, placeholdery
 z datami i schowkiem, pola do wypełnienia (tekst / wieloliniowe / lista),
 znacznik kursora, okno szybkiego wyboru, foldery, zasobnik, autostart,
 eksport i import, instalator NSIS + wersja portable.

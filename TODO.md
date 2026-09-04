@@ -120,6 +120,38 @@ otwieranie palety okaże się zauważalnie wolne.
 
 ## 4. Zweryfikowane
 
+### Wersja 0.1.2 — awarie zapisu przestały być niewidzialne
+
+Incydent: podczas pracy nad 0.1.1 test end-to-end **skasował bazę użytkownika
+i ubił jego działającą instancję** (`taskkill /IM Snippety.exe /F`, czyli bez
+`before-quit`, czyli bez zapisu). Świeżo dodany snippet przetrwał wyłącznie
+w kopii zapasowej. Stan na dysku był niespójny: `.bak` nowszy i większy od
+pliku głównego.
+
+Dokładnego mechanizmu rozjazdu **nie udało się odtworzyć** z timestampów —
+i nie zmyślamy go. Zamiast tego dołożono obserwowalność, żeby następny taki
+przypadek dało się rozpoznać zamiast zgadywać:
+
+- `jsonStore` raportuje awarie zapisu przez `log()`, nie `console.error`
+  (który na Windows nigdzie nie dociera — awaria bazy była całkowicie cicha)
+- rozmiar zapisanego `.tmp` jest porównywany z oczekiwanym; niepełny zapis
+  nie podmienia działającego pliku
+- niedokończony `.tmp` jest kasowany
+- przy starcie `.bak` nowszy od pliku głównego daje ostrzeżenie w logu
+- to samo `console.error` usunięte z rejestracji globalnego skrótu — zajęta
+  kombinacja klawiszy nie zgłaszała się w żaden sposób
+
+Test end-to-end przestał być groźny dla danych:
+
+- sprząta **wyłącznie własne drzewo procesów** (`taskkill /PID … /T`)
+- **odmawia startu**, gdy działa inna instancja aplikacji — blokada jednej
+  instancji sprawiłaby i tak, że test steruje cudzą aplikacją, a wyniki
+  byłyby fałszywe
+- używa osobnego katalogu danych (`--user-data-dir`), wprowadzone w 0.1.1
+
+Sprawdzone: przy działającej aplikacji użytkownika test odmawia startu
+i wszystkie jej procesy przeżywają.
+
 ### Wersja 0.1.1 — naprawa pierwszego planu okien
 
 Zgłoszony objaw: po wypełnieniu formularza `/oferta` **nic się nie wklejało**.
