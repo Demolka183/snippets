@@ -40,6 +40,23 @@
   letter-spacing: 0.01em;
 }
 
+/* Numer wersji przy nazwie - ma byc czytelny, ale nie konkurowac z trescia. */
+.version-badge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  transition: color 0.12s, border-color 0.12s;
+}
+.version-badge:hover {
+  color: var(--accent-hover);
+  border-color: var(--accent-border);
+}
+
 .topbar-actions {
   display: flex;
   align-items: center;

@@ -7,7 +7,8 @@ miejscu podmienia to na przygotowany wcześniej szablon.
 Działa wszędzie tam, gdzie da się pisać: Outlook, Teams, przeglądarka, Word.
 
 Wszystko dzieje się lokalnie, na Twoim komputerze. Bez konta, bez serwera, bez
-wysyłania czegokolwiek do internetu.
+wysyłania czegokolwiek do internetu — jedyne, co aplikacja kiedykolwiek otwiera
+na zewnątrz, to strona z wydaniami, gdy sam klikniesz numer wersji.
 
 ---
 
@@ -58,6 +59,15 @@ bez tego trzeba ją odpalać ręcznie po każdym restarcie.
 Otwiera listę z wyszukiwarką, gdy nie pamiętasz triggera — strzałki wybierają,
 Enter wstawia. Przy kilkudziesięciu snippetach to różnica między używaniem
 a nieużywaniem.
+
+### Skąd wiesz, że masz aktualną wersję
+
+Numer wersji jest w pasku górnym, obok nazwy „Snippety”. Kliknięcie w niego
+otwiera listę wydań — jeśli na górze widnieje wyższy numer niż Twój, jest
+nowsza wersja.
+
+Aplikacja **nie sprawdza tego sama** i nie łączy się z niczym w tle. To
+świadoma decyzja: ma działać w całości offline.
 
 ### Zamykanie
 

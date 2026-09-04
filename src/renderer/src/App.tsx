@@ -53,6 +53,7 @@ export function App(): React.JSX.Element {
   const [query, setQuery] = useState('')
   const [folderFilter, setFolderFilter] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
+  const [version, setVersion] = useState('')
 
   const reload = useCallback(async () => {
     const [list, folderList] = await Promise.all([window.api.snippets.list(), window.api.folders.list()])
@@ -63,6 +64,7 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     void reload()
     void window.api.settings.get().then(setSettings)
+    void window.api.app.info().then((info) => setVersion(info.version))
     const offSnippets = window.api.on.snippetsChanged(() => void reload())
     const offSettings = window.api.on.settingsChanged(setSettings)
     return () => {
@@ -126,6 +128,15 @@ export function App(): React.JSX.Element {
         <div className="brand">
           <span className="brand-mark">/</span>
           <span className="brand-name">Snippety</span>
+          {version ? (
+            <button
+              className="version-badge"
+              title={`Wersja ${version} — kliknij, żeby sprawdzić, czy jest nowsza`}
+              onClick={() => void window.api.app.openReleases()}
+            >
+              {version}
+            </button>
+          ) : null}
         </div>
 
         <div className="topbar-actions">

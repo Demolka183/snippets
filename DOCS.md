@@ -16,7 +16,10 @@ Drugi sposób wywołania to **okno szybkiego wyboru** pod globalnym skrótem
 (domyślnie `Ctrl+Shift+Space`) — lista snippetów z wyszukiwarką, na wypadek gdy
 trigger wyleciał z głowy.
 
-Aplikacja jest w całości lokalna. Nie ma serwera, konta ani synchronizacji.
+Aplikacja jest w całości lokalna. Nie ma serwera, konta ani synchronizacji,
+i **nie wykonuje żadnych połączeń sieciowych z własnej inicjatywy** — jedyne
+wyjście na zewnątrz to otwarcie listy wydań w przeglądarce, gdy użytkownik
+kliknie znacznik wersji.
 
 ---
 
@@ -279,6 +282,17 @@ Renderer nie ma dostępu do Node. Dodanie nowej operacji wymaga **trzech** zmian
 Preload jest typowany jako `const api: SnippetyApi`, więc pominięcie punktu 3
 wywali się na typechecku, a nie po cichu w produkcji.
 
+### 7.1 Jedyny kanał wychodzący na zewnątrz
+
+`app:openReleases` otwiera stronę wydań w domyślnej przeglądarce. Adres jest
+**stałą w `ipc.ts`** — renderer nie przekazuje URL-a, więc nie da się przez ten
+kanał otworzyć czegokolwiek innego. To świadoma decyzja: kanał przyjmujący
+dowolny adres byłby furtką do otwierania dowolnych stron z poziomu UI.
+
+Sprawdzanie aktualizacji jest **ręczne z założenia**. Automatyczne odpytywanie
+GitHuba przy starcie odebrałoby aplikacji własność bycia w pełni offline —
+a to jest obietnica złożona użytkownikom w README i w opisie wydania.
+
 Zdarzenia w drugą stronę (`snippets:changed`, `settings:changed`,
 `palette:opened`, `form:request`) idą przez `broadcast()` z `windows.ts`
 i subskrypcje w `api.on.*`, które zwracają funkcję odpinającą dla `useEffect`.
@@ -389,10 +403,10 @@ w nietypowy sposób, to jest pierwszy podejrzany.
 
 ## 11. Stan projektu
 
-**Wersja 0.1.2.** Działa: rozwijanie triggerów w dwóch trybach, placeholdery
+**Wersja 0.1.3.** Działa: rozwijanie triggerów w dwóch trybach, placeholdery
 z datami i schowkiem, pola do wypełnienia (tekst / wieloliniowe / lista),
 znacznik kursora, okno szybkiego wyboru, foldery, zasobnik, autostart,
-eksport i import, instalator NSIS + wersja portable.
+eksport i import, znacznik wersji w pasku, instalator NSIS + wersja portable.
 
 Zweryfikowane w tej wersji:
 

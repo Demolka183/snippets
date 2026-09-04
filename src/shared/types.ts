@@ -158,6 +158,8 @@ export interface SnippetyApi {
     exportToFile(): Promise<{ ok: boolean; path?: string }>
     importFromFile(replaceExisting: boolean): Promise<{ ok: boolean; summary?: ImportSummary; error?: string }>
     openDataFolder(): Promise<void>
+    /** Otwiera liste wydan w przegladarce - do sprawdzenia, czy jest nowsza wersja. */
+    openReleases(): Promise<void>
     showManager(): Promise<void>
   }
   on: {

@@ -71,6 +71,7 @@ const api: SnippetyApi = {
       error?: string
     }> => ipcRenderer.invoke('app:import', replaceExisting),
     openDataFolder: (): Promise<void> => ipcRenderer.invoke('app:openDataFolder'),
+    openReleases: (): Promise<void> => ipcRenderer.invoke('app:openReleases'),
     showManager: (): Promise<void> => ipcRenderer.invoke('app:showManager')
   },
 

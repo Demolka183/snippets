@@ -16,6 +16,9 @@ import * as store from './store/index.js'
 import { applyAutostart, applyPaletteHotkey, refreshTrayMenu } from './system.js'
 import { broadcast, hidePalette, resolveForm, showManager } from './windows.js'
 
+/** Lista wydan - jedyny zewnetrzny adres, jaki aplikacja kiedykolwiek otwiera. */
+const RELEASES_URL = 'https://github.com/Demolka183/snippets/releases'
+
 /** Zmiana bazy: przebuduj indeks triggerow i powiadom okna. */
 function afterChange(): void {
   refreshIndex()
@@ -105,6 +108,10 @@ export function registerIpc(): void {
   }))
 
   ipcMain.handle('app:openDataFolder', () => shell.showItemInFolder(store.storePaths().snippets))
+
+  // Adres jest stala po stronie procesu glownego. Renderer nie moze podac
+  // dowolnego URL-a - kanal otwiera wylacznie to jedno miejsce.
+  ipcMain.handle('app:openReleases', () => shell.openExternal(RELEASES_URL))
 
   ipcMain.handle('app:export', async () => {
     const stamp = new Date().toISOString().slice(0, 10)

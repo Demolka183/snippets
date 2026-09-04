@@ -115,10 +115,28 @@ otwieranie palety okaże się zauważalnie wolne.
   sortowanie w palecie, ale nigdzie nie jest pokazany w formie podsumowania.
 - **Podpowiedzi triggerów w locie** — małe okienko pokazujące pasujące triggery
   w trakcie pisania, zanim domkniemy cały ciąg.
+- **Automatyczne sprawdzanie aktualizacji** — odrzucone w 0.1.3, ale ma sens,
+  gdy aplikacja rozejdzie się po dziale i nikt nie będzie klikał znacznika.
+  Warunek: przełącznik w Ustawieniach i poprawiony README, żeby nie obiecywać
+  pełnego offline'u wbrew faktom.
 
 ---
 
 ## 4. Zweryfikowane
+
+### Wersja 0.1.3 — znacznik wersji
+
+Numer wersji widoczny w pasku górnym obok nazwy, klikalny — otwiera listę wydań
+w przeglądarce. Wcześniej wersja była tylko w Ustawieniach, na dole, obok
+ścieżki do bazy.
+
+Sprawdzanie aktualizacji zostało **świadomie ręczne**. Automatyczne odpytywanie
+GitHuba przy starcie było rozważane i odrzucone: odebrałoby aplikacji własność
+bycia w pełni offline, obiecaną w README i w opisie wydania. Gdyby wracać do
+tematu — patrz „Pomysły na później”.
+
+Sprawdzone: znacznik renderuje się w pasku, kanał `app:openReleases` ma adres
+zaszyty po stronie procesu głównego (renderer nie może podać własnego URL-a).
 
 ### Wersja 0.1.2 — awarie zapisu przestały być niewidzialne
 

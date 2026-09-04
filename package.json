@@ -1,6 +1,6 @@
 {
   "name": "snippety",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Lokalny menedzer snippetow z automatycznym rozwijaniem tekstu",
   "main": "./out/main/index.js",
   "author": "Demolka183",
