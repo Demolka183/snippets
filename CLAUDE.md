@@ -96,6 +96,28 @@ faktycznie działa. Typecheck i testy parsera tego nie wyłapią.
 - **Kod i komentarze bez polskich znaków diakrytycznych.** Teksty widoczne
   dla użytkownika (JSX, etykiety) — z pełną polszczyzną.
 
+## Okna dialogowe — zasada twarda
+
+**Nie używaj `window.prompt()`.** Electron go nie implementuje — nie pokazuje
+nic i nie zwraca wartości, więc przycisk cicho przestaje działać. Tak zginął
+przycisk „Nowy folder” aż do 0.1.4.
+
+Każde pytanie do użytkownika zadawaj **własnym elementem interfejsu**: pole
+tekstowe pojawiające się w miejscu przycisku, z „Zapisz”/„Anuluj”, obsługą
+Enter i Escape oraz `autoFocus`. Wzorzec jest w `SnippetEditor` (dodawanie
+folderu) i w `SettingsView` (zmiana nazwy). Potwierdzenia destrukcyjne
+robimy tak samo — patrz `confirmDelete` w `SnippetEditor`.
+
+## Test end-to-end przejmuje komputer — zasada twarda
+
+`npm run test:e2e` wysyła prawdziwe zdarzenia klawiatury, w tym `Ctrl+A`
+i `Delete`, do okna na pierwszym planie. **Nie uruchamiaj go, gdy ktoś przy
+tym komputerze pracuje**, i nigdy przy otwartym pulpicie zdalnym — klient RDP
+przekazuje klawisze na drugą maszynę i test kasuje tam cudzą pracę. Test sam
+to teraz wykrywa i przerywa, ale kontrola nie zwalnia z myślenia: przed
+uruchomieniem upewnij się, że użytkownik wie, że za chwilę stracisz kontrolę
+nad jego klawiaturą.
+
 ## Znaki specjalne w kodzie — zasada twarda
 
 Znaki sterujące i niedrukowalne zapisuj **jawnym escape'em**, nigdy dosłownie:

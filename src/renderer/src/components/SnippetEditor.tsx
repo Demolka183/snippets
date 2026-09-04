@@ -45,6 +45,8 @@ export function SnippetEditor({
   const [previewText, setPreviewText] = useState('')
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  /** `null` = nie dodajemy folderu; string = wpisywana nazwa. */
+  const [newFolder, setNewFolder] = useState<string | null>(null)
   const contentRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -101,12 +103,19 @@ export function SnippetEditor({
     })
   }
 
+  /**
+   * Nazwe folderu bierzemy z wlasnego pola, nie z `window.prompt`.
+   * Electron nie implementuje `prompt()` - wywolanie konczy sie komunikatem
+   * "prompt() is not supported" w konsoli renderera, a przycisk po prostu
+   * nic nie robi. To byl blad zgloszony jako "nowy folder nie dziala".
+   */
   const addFolder = async (): Promise<void> => {
-    const name = window.prompt('Nazwa nowego folderu:')?.trim()
+    const name = (newFolder ?? '').trim()
     if (!name) return
     const folder = await window.api.folders.create(name)
     onFoldersChanged()
     patch({ folderId: folder.id })
+    setNewFolder(null)
   }
 
   const canSave = !triggerError && value.trigger.trim().length > 0 && value.content.length > 0
@@ -211,23 +220,52 @@ export function SnippetEditor({
         <div className="editor-row">
           <div className="field editor-folder">
             <label htmlFor="snippet-folder">Folder</label>
-            <div className="folder-row">
-              <select
-                id="snippet-folder"
-                value={value.folderId ?? ''}
-                onChange={(e) => patch({ folderId: e.target.value || null })}
-              >
-                <option value="">Bez folderu</option>
-                {folders.map((folder) => (
-                  <option key={folder.id} value={folder.id}>
-                    {folder.name}
-                  </option>
-                ))}
-              </select>
-              <button className="btn btn-sm" onClick={() => void addFolder()}>
-                Nowy folder
-              </button>
-            </div>
+            {newFolder === null ? (
+              <div className="folder-row">
+                <select
+                  id="snippet-folder"
+                  value={value.folderId ?? ''}
+                  onChange={(e) => patch({ folderId: e.target.value || null })}
+                >
+                  <option value="">Bez folderu</option>
+                  {folders.map((folder) => (
+                    <option key={folder.id} value={folder.id}>
+                      {folder.name}
+                    </option>
+                  ))}
+                </select>
+                <button className="btn btn-sm" onClick={() => setNewFolder('')}>
+                  Nowy folder
+                </button>
+              </div>
+            ) : (
+              <div className="folder-row">
+                <input
+                  type="text"
+                  autoFocus
+                  value={newFolder}
+                  placeholder="Nazwa folderu"
+                  onChange={(e) => setNewFolder(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      void addFolder()
+                    }
+                    if (e.key === 'Escape') setNewFolder(null)
+                  }}
+                />
+                <button
+                  className="btn btn-primary btn-sm"
+                  disabled={!newFolder.trim()}
+                  onClick={() => void addFolder()}
+                >
+                  Dodaj
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setNewFolder(null)}>
+                  Anuluj
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="field editor-enabled">

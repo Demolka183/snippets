@@ -252,8 +252,10 @@
   display: flex;
   gap: 8px;
 }
-.folder-row select {
+.folder-row select,
+.folder-row input[type='text'] {
   flex: 1;
+  min-width: 0;
 }
 
 .editor-enabled {
@@ -367,6 +369,12 @@
 .folder-actions {
   display: flex;
   gap: 4px;
+  flex-shrink: 0;
+}
+/* Pole zmiany nazwy nie moze rozepchac wiersza listy folderow. */
+.folder-list li input[type='text'] {
+  max-width: 280px;
+  margin-right: 12px;
 }
 
 .button-row {

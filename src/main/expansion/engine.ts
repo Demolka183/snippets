@@ -196,13 +196,15 @@ async function runExpansion(
     const rendered = render(snippet.content, { clipboard: await clipboard.readText(), values })
     const suffix = settings.keepTerminator ? terminator : ''
 
-    await replaceTrigger({
+    const done = await replaceTrigger({
       eraseCount,
       text: rendered.text + suffix,
       // Doklejony znak konczacy przesuwa kursor o jedna pozycje dalej.
       cursorBack: rendered.cursorBack > 0 ? rendered.cursorBack + suffix.length : 0,
       restoreClipboard: settings.restoreClipboard
     })
+    // Nieudana podmiana to nie uzycie - licznik ma pokazywac prawde.
+    if (!done) return
 
     recordUsage(snippet.id)
     deps?.onExpanded({ snippetId: snippet.id, trigger: snippet.trigger, at: new Date().toISOString() })
@@ -242,12 +244,13 @@ export async function insertSnippetById(id: string): Promise<boolean> {
     log('paleta', `wstawiam ${snippet.trigger} do okna: ${describeForeground()}`)
 
     const rendered = render(snippet.content, { clipboard: await clipboard.readText(), values })
-    await replaceTrigger({
+    const done = await replaceTrigger({
       eraseCount: 0,
       text: rendered.text,
       cursorBack: rendered.cursorBack,
       restoreClipboard: settings.restoreClipboard
     })
+    if (!done) return false
 
     recordUsage(snippet.id)
     deps?.onExpanded({ snippetId: snippet.id, trigger: snippet.trigger, at: new Date().toISOString() })

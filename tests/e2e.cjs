@@ -10,7 +10,15 @@
  *   npm run test:e2e            - przeciw wersji ze zrodel (out/)
  *   npm run test:e2e:packaged   - przeciw release/win-unpacked (sprawdza asar)
  *
- * Na czas testu przejmuje klawiature i otwiera Notatnik. Nie wchodzi do buildu.
+ * UWAGA: test PRZEJMUJE KLAWIATURE I EKRAN. Otwiera Notatnik, wymusza mu
+ * pierwszy plan i wysyla prawdziwe zdarzenia klawiatury - lacznie z Ctrl+A
+ * i Delete. Nie wolno go uruchamiac, gdy ktos przy tym komputerze pracuje.
+ *
+ * Szczegolnie grozne jest to przy otwartym pulpicie zdalnym: klient RDP
+ * przekazuje nacisniecia klawiszy do zdalnej maszyny, wiec test moze pisac
+ * i kasowac po drugiej stronie polaczenia. Stad kontrola ponizej.
+ *
+ * Nie wchodzi do buildu.
  */
 const { spawn, execFileSync } = require('child_process')
 const fs = require('fs')
@@ -98,9 +106,11 @@ async function readTargetText() {
 }
 
 async function ensureTarget(say) {
-  const notepad = FindWindowW('Notepad', null)
-  if (fgTitle().indexOf('Notatnik') === -1) forceForeground(notepad)
-  await sleep(300)
+  for (let i = 0; i < 5 && fgTitle().indexOf('Notatnik') === -1; i++) {
+    const hwnd = FindWindowW('Notepad', null)
+    if (hwnd) forceForeground(hwnd)
+    await sleep(400)
+  }
   return fgTitle().indexOf('Notatnik') !== -1
 }
 
@@ -117,6 +127,35 @@ async function clearTarget() {
 const APP_DIR = path.join(__dirname, '..')
 let appProc = null
 let notepadProc = null
+
+/**
+ * Klienci pulpitu zdalnego. Przy aktywnym polaczeniu nacisniecia klawiszy
+ * ida do zdalnej maszyny, a test kasowalby tam cudza prace.
+ */
+const REMOTE_DESKTOP_PROCESSES = [
+  'mstsc.exe',            // Podlaczanie pulpitu zdalnego (Windows)
+  'msrdc.exe',            // Remote Desktop / Windows App
+  'RdClient.Windows.exe', // Remote Desktop z Microsoft Store
+  'AnyDesk.exe',
+  'TeamViewer.exe',
+  'vncviewer.exe',
+  'Citrix.exe',
+  'CDViewer.exe'          // Citrix Workspace
+]
+
+/** Zwraca nazwy uruchomionych klientow pulpitu zdalnego. */
+function remoteDesktopClients() {
+  const found = []
+  for (const name of REMOTE_DESKTOP_PROCESSES) {
+    try {
+      const out = execFileSync('tasklist', ['/FI', 'IMAGENAME eq ' + name, '/NH'], { encoding: 'utf8' })
+      if (out.toLowerCase().includes(name.toLowerCase())) found.push(name)
+    } catch {
+      /* brak procesu - tasklist potrafi zwrocic blad */
+    }
+  }
+  return found
+}
 
 /** Czy dziala jakas instancja aplikacji poza ta, ktora uruchomil test. */
 function foreignInstanceRunning() {
@@ -155,12 +194,25 @@ async function main() {
 
   // Blokada jednej instancji sprawilaby, ze test steruje aplikacja uzytkownika
   // zamiast wlasna - a wyniki bylyby falszywe. Lepiej nie zaczynac.
-  if (foreignInstanceRunning()) {
+  // Test wysyla Ctrl+A i Delete. Przy aktywnym pulpicie zdalnym trafiloby to
+  // na druga maszyne i skasowalo tam czyjas prace. Zdarzylo sie raz - wiecej nie.
+  const remote = remoteDesktopClients()
+  if (remote.length > 0 && !process.argv.includes('--i-know-what-i-am-doing')) {
     say('')
-    say('BLAD: Snippety juz dziala.')
-    say('Zamknij aplikacje (ikona w zasobniku -> Zakoncz) i uruchom test ponownie.')
-    say('Test nie ubija cudzych instancji, zeby nie stracic niezapisanych danych.')
+    say('PRZERWANE: wykryto uruchomionego klienta pulpitu zdalnego: ' + remote.join(', '))
+    say('')
+    say('Test wysyla prawdziwe zdarzenia klawiatury, w tym Ctrl+A i Delete.')
+    say('Klient RDP przekazuje je do zdalnej maszyny - moglyby skasowac tam czyjas prace.')
+    say('')
+    say('Zamknij polaczenie zdalne i powtorz, albo - jesli masz pewnosc, ze nikomu')
+    say('to nie zaszkodzi - uruchom z flaga --i-know-what-i-am-doing')
     return
+  }
+
+  if (foreignInstanceRunning()) {
+    say('UWAGA: dziala juz inna instancja Snippetow.')
+    say('       Test uzywa wlasnych triggerow /qa*, wiec nie powinna przeszkadzac,')
+    say('       ale przy dziwnych wynikach zamknij ja i powtorz.')
   }
 
   // Osobny katalog danych na czas testu. Bez tego test kasowalby prawdziwa
@@ -168,6 +220,29 @@ async function main() {
   const dataDir = path.join(__dirname, '.tmp-userdata')
   fs.rmSync(dataDir, { recursive: true, force: true })
   fs.mkdirSync(dataDir, { recursive: true })
+
+  // Wlasne triggery z prefiksem /qa. Nie polegamy na przykladach wbudowanych
+  // (te moga sie zmienic) i nie kolidujemy z baza uzytkownika, wiec jego
+  // instancja moze spokojnie dzialac w tle.
+  const now = new Date().toISOString()
+  const seed = (trigger, name, content) => ({
+    id: trigger, trigger, name, content,
+    folderId: null, enabled: true, createdAt: now, updatedAt: now,
+    usageCount: 0, lastUsedAt: null
+  })
+  fs.writeFileSync(
+    path.join(dataDir, 'snippets.json'),
+    JSON.stringify({
+      version: 1,
+      folders: [],
+      snippets: [
+        seed('/qa1', 'Data', '{{data}}'),
+        seed('/qa2', 'Kursor', 'Dzien dobry,\n\n{{kursor}}\n\nPozdrawiam'),
+        seed('/qa3', 'Pola', 'Witaj {{pole:Imie}}, firma {{pole:Firma}}.')
+      ]
+    }, null, 2),
+    'utf8'
+  )
 
   const packaged = process.argv.includes('--packaged')
   const exe = packaged
@@ -211,14 +286,12 @@ async function main() {
 
   // Bez tego Notatnik zostaje w tle, a test pisze w okno, ktore akurat
   // jest aktywne - wyniki sa wtedy bezwartosciowe.
-  const notepad = FindWindowW('Notepad', null)
-  if (!notepad) {
-    say('BLAD: nie znaleziono okna Notatnika')
-    return
-  }
-  for (let i = 0; i < 10 && fgTitle().indexOf('Notatnik') === -1; i++) {
-    forceForeground(notepad)
-    await sleep(400)
+  // Okno szukane w kazdej probie: bezposrednio po spawnie moze jeszcze
+  // nie istniec, a uchwyt zlapany za wczesnie bywa nieaktualny.
+  for (let i = 0; i < 20 && fgTitle().indexOf('Notatnik') === -1; i++) {
+    const hwnd = FindWindowW('Notepad', null)
+    if (hwnd) forceForeground(hwnd)
+    await sleep(500)
   }
   say('okno docelowe: ' + fgTitle())
   if (fgTitle().indexOf('Notatnik') === -1) {
@@ -233,10 +306,10 @@ async function main() {
 
   /* --- przypadek 1: prosty trigger bez pol --- */
   say('')
-  say('--- 1. /data (bez pol) ---')
+  say('--- 1. /qa1 - prosty trigger z data ---')
   if (!(await ensureTarget(say))) say('  UWAGA: cel nie jest Notatnikiem: ' + fgTitle())
   await clearTarget()
-  await type('/data')
+  await type('/qa1')
   await sleep(2000)
   const got1 = (await readTargetText()).trim()
   const d = new Date()
@@ -244,26 +317,29 @@ async function main() {
   const expected1 = `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`
   say('  oczekiwano: ' + JSON.stringify(expected1))
   say('  otrzymano:  ' + JSON.stringify(got1))
-  results.push(['/data', got1 === expected1])
+  results.push(['/qa1 (data)', got1 === expected1])
 
   /* --- przypadek 2: trigger ze znacznikiem kursora --- */
   say('')
-  say('--- 2. /przywitanie (znacznik kursora) ---')
+  say('--- 2. /qa2 - znacznik kursora ---')
   if (!(await ensureTarget(say))) say('  UWAGA: cel nie jest Notatnikiem: ' + fgTitle())
   await clearTarget()
-  await type('/przywitanie')
+  await type('/qa2')
   await sleep(2000)
   const got2 = (await readTargetText()).replace(/\r\n/g, '\n').trim()
-  const ok2 = got2.startsWith('Dzien dobry,') && got2.includes('Pozdrawiam serdecznie')
+  // Tresc /qa2 ma znacznik kursora miedzy dwiema pustymi liniami - po
+  // rozwinieciu znacznik znika, a puste linie zostaja.
+  const NL = String.fromCharCode(10)
+  const ok2 = got2 === 'Dzien dobry,' + NL + NL + NL + NL + 'Pozdrawiam' && !got2.includes('{{')
   say('  otrzymano:  ' + JSON.stringify(got2))
-  results.push(['/przywitanie', ok2])
+  results.push(['/qa2 (kursor)', ok2])
 
   /* --- przypadek 3: trigger z formularzem pol --- */
   say('')
-  say('--- 3. /oferta (formularz pol, powrot focusu) ---')
+  say('--- 3. /qa3 - formularz pol i powrot focusu ---')
   if (!(await ensureTarget(say))) say('  UWAGA: cel nie jest Notatnikiem: ' + fgTitle())
   await clearTarget()
-  await type('/oferta')
+  await type('/qa3')
   await sleep(2500) // czas na pojawienie sie formularza
   say('  wypelniam formularz...')
   await type('Jan')
@@ -274,9 +350,48 @@ async function main() {
   uIOhook.keyTap(K.Enter)
   await sleep(2500)
   const got3 = (await readTargetText()).replace(/\r\n/g, '\n').trim()
-  const ok3 = got3.includes('Jan') && got3.includes('Testowa') && !got3.includes('/oferta')
+  const ok3 = got3.includes('Jan') && got3.includes('Testowa') && !got3.includes('/qa3')
   say('  otrzymano:  ' + JSON.stringify(got3))
-  results.push(['/oferta', ok3])
+  results.push(['/qa3 (pola)', ok3])
+
+  /* --- przypadek 4: regresja schowka --- */
+  say('')
+  say('--- 4. regresja: przywracanie schowka nie moze zjesc wklejenia ---')
+  // Blad z 0.1.3: aplikacja oddawala schowek po 120 ms, zanim program docelowy
+  // przetworzyl Ctrl+V - i wklejala sie stara zawartosc schowka zamiast snippetu.
+  const SENTINEL = 'WARTOSC-KONTROLNA-SCHOWKA-12345'
+  try {
+    execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', "Set-Clipboard -Value '" + SENTINEL + "'"], { timeout: 15000 })
+  } catch (err) {
+    say('  nie udalo sie ustawic schowka: ' + err.message)
+  }
+  await sleep(400)
+  let clipBefore = ''
+  try {
+    clipBefore = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Get-Clipboard -Raw'], { encoding: 'utf8', timeout: 15000 }).trim()
+  } catch {}
+  say('  schowek przed proba: ' + JSON.stringify(clipBefore))
+  results.push(['schowek ustawiony na wartosc kontrolna', clipBefore === SENTINEL])
+
+  if (!(await ensureTarget(say))) say('  UWAGA: cel nie jest Notatnikiem: ' + fgTitle())
+  await clearTarget()
+  await type('/qa1')
+  await sleep(2500)
+
+  // Schowek sprawdzamy PRZED odczytem pola - odczyt idzie przez Ctrl+C i by go nadpisal.
+  let clipAfter = ''
+  try {
+    clipAfter = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Get-Clipboard -Raw'], { encoding: 'utf8', timeout: 15000 }).trim()
+  } catch {}
+  const restored = clipAfter === SENTINEL
+  say('  schowek po rozwinieciu: ' + JSON.stringify(clipAfter))
+  results.push(['przywrocenie schowka', restored])
+
+  const got4 = (await readTargetText()).trim()
+  const pastedSnippet = got4 === expected1
+  say('  w polu:                 ' + JSON.stringify(got4))
+  if (got4 === SENTINEL) say('  >>> BLAD: wklejila sie zawartosc schowka zamiast snippetu')
+  results.push(['wklejony snippet, nie schowek', pastedSnippet])
 
   /* --- podsumowanie --- */
   say('')

@@ -124,6 +124,51 @@ otwieranie palety okaże się zauważalnie wolne.
 
 ## 4. Zweryfikowane
 
+### Wersja 0.1.4 — wyścig o schowek
+
+Zgłoszenie z drugiego komputera: **każdy** snippet wklejał zawartość schowka
+zamiast przygotowanej treści. Na pierwszej maszynie to samo działało poprawnie.
+
+Rozstrzygnięte jednym testem po stronie użytkownika: wyłączenie „Przywracaj
+schowek” usuwało objaw. To wskazało przyczynę — aplikacja oddawała schowek
+po 120 ms od `Ctrl+V`, a wolniejsza maszyna przetwarzała wklejenie dopiero po
+tym czasie i wstawiała przywróconą, starą zawartość.
+
+Naprawione w `src/main/keyboard/inject.ts`:
+
+- schowek oddawany jako **ostatnia** czynność, po ustawieniu kursora, po
+  dodatkowym buforze 450 ms i tylko gdy nadal zawiera naszą treść
+- ustawienie schowka **potwierdzane odczytem** i ponawiane do pięciu razy;
+  gdy się nie uda, rozwinięcie jest przerywane **zanim** trigger zostanie
+  skasowany (lepiej nie rozwinąć niż wkleić cudzy tekst)
+- `replaceTrigger` zwraca teraz informację o niepowodzeniu, a silnik nie
+  liczy nieudanej podmiany jako użycia
+
+Test end-to-end rozbudowany o przypadek regresji: schowek ustawiany na wartość
+kontrolną, po rozwinięciu sprawdzane jest **i** że wróciła, **i** że w polu jest
+snippet, a nie ona. Przechodzi komplet sześciu asercji.
+
+Uczciwe zastrzeżenie: na maszynie deweloperskiej ten błąd nigdy się nie
+ujawniał, więc test nie został sprawdzony pod kątem tego, czy **czerwieni się**
+na starym kodzie. Utrwala poprawne zachowanie i wyłapie problem tam, gdzie
+wyścig faktycznie zachodzi.
+
+Przy okazji test przestał zależeć od wbudowanych przykładów — ma własne
+triggery `/qa*`, dzięki czemu może działać obok uruchomionej instancji
+użytkownika, nie kolidując z jego bazą.
+
+**Naprawiony przycisk „Nowy folder”.** Nie dało się grupować snippetów, bo
+przycisk opierał się na `window.prompt()`, którego Electron nie implementuje —
+wywołanie cicho nic nie robiło. Ten sam błąd miała zmiana nazwy folderu
+w Ustawieniach. Oba zastąpione polem tekstowym w interfejsie, z obsługą Enter
+i Escape. Szczegóły w `DOCS.md` 10.4.
+
+**Test nie uruchomi się przy otwartym pulpicie zdalnym.** Klient RDP przekazuje
+naciśnięcia klawiszy do zdalnej maszyny — test wysyłający `Ctrl+A` i `Delete`
+kasował tam cudzą pracę. Zdarzyło się raz, podczas prac nad 0.1.4. Wykrywanie
+obejmuje `mstsc`, `msrdc`, Remote Desktop ze Store, AnyDesk, TeamViewer, VNC
+i Citrix; świadome obejście przez `--i-know-what-i-am-doing`.
+
 ### Wersja 0.1.3 — znacznik wersji
 
 Numer wersji widoczny w pasku górnym obok nazwy, klikalny — otwiera listę wydań

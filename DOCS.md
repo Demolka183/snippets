@@ -136,12 +136,17 @@ Dwa tryby (ustawienie `expandMode`):
 
 ### 4.4 Podmiana
 
-`inject.ts:replaceTrigger()`:
+`inject.ts:replaceTrigger()`. **Kolejność nie jest przypadkowa** — wynika
+z dwóch błędów, które realnie wystąpiły (patrz 4.7):
 
-1. `eraseBackwards(n)` — n × Backspace, z mikroprzerwą co 16 klawiszy.
-2. Zapamiętanie schowka → `clipboard.writeText(tekst)` → `Ctrl+V` → przywrócenie
-   schowka po 120 ms (tylko jeśli nikt go w międzyczasie nie podmienił).
-3. `moveCaretLeft(cursorBack)` — obsługa `{{kursor}}`.
+1. Zapamiętanie dotychczasowej zawartości schowka.
+2. Ustawienie schowka na treść snippetu **z potwierdzeniem odczytem**, do
+   pięciu prób. Jeśli się nie uda — przerywamy, nie kasując triggera.
+3. `eraseBackwards(n)` — n × Backspace, z mikroprzerwą co 16 klawiszy.
+4. `Ctrl+V`, potem odczekanie `afterPaste` (150 ms).
+5. `moveCaretLeft(cursorBack)` — obsługa `{{kursor}}`.
+6. Odczekanie `beforeRestore` (450 ms) i dopiero wtedy oddanie schowka —
+   wyłącznie jeśli nadal zawiera naszą treść.
 
 **Dlaczego schowek, a nie wpisywanie znak po znaku:** wklejenie jest jednym
 zdarzeniem, nie gubi znaków w aplikacjach z własną obsługą wejścia (Teams,
@@ -164,6 +169,27 @@ podmianą otwiera się okno formularza. Sekwencja:
 6. Czekamy `REFOCUS_DELAY` (220 ms), dopiero potem kasujemy trigger i wklejamy.
 
 Anulowanie zostawia trigger w polu nietknięty.
+
+### 4.5b Schowek — dwie pułapki, obie zaliczone
+
+**Zapis do schowka potrafi nie dojść do skutku.** Schowek Windows bywa przez
+ułamek sekundy trzymany przez inny proces — menedżery schowka, historia
+`Win+V`, narzędzia firmowe. Wcześniej kod ustawiał schowek i od razu wysyłał
+`Ctrl+V` bez sprawdzenia; przy nieudanym zapisie wklejała się **poprzednia
+zawartość schowka**, czyli cudzy tekst w środek maila. Teraz zapis jest
+potwierdzany odczytem i ponawiany, a gdy się nie uda — rozwinięcie jest
+przerywane, zanim cokolwiek zostanie skasowane.
+
+**Przywrócenie schowka wyprzedzało wklejenie.** Aplikacja docelowa przetwarza
+`Ctrl+V` asynchronicznie. Oddanie schowka po 120 ms wystarczało na jednej
+maszynie, a na drugiej już nie — tam program zdążył wkleić dopiero po
+przywróceniu i wstawiał **starą zawartość schowka zamiast snippetu**. Objaw
+mylący, bo wyglądał jakby snippety w ogóle nie działały.
+
+Stąd `beforeRestore` = 450 ms i oddawanie schowka jako ostatnia czynność, po
+ustawieniu kursora. **To jest ta stała do podniesienia**, gdyby objaw wrócił
+na jeszcze wolniejszej maszynie. Diagnostyka bez zmiany kodu: wyłącz
+w Ustawieniach „Przywracaj schowek”. Jeśli problem znika, to ten wyścig.
 
 ### 4.6 Pierwszy plan okien — dlaczego to nie jest trywialne
 
@@ -337,7 +363,19 @@ node scripts/make-icons.mjs   # regeneracja ikon
 `npm run test:e2e` uruchamia aplikację, otwiera Notatnik, **wpisuje w niego
 triggery prawdziwymi zdarzeniami klawiatury** i odczytuje wynik przez schowek.
 Sprawdza całą ścieżkę: hook, bufor, dopasowanie, formularz pól, powrót focusu
-i wklejenie. Na czas testu przejmuje klawiaturę — nie pisz nic w tym czasie.
+i wklejenie.
+
+> **Test przejmuje klawiaturę i ekran.** Wysyła między innymi `Ctrl+A`
+> i `Delete`. Nie uruchamiaj go, gdy ktoś przy tym komputerze pracuje.
+>
+> Przy **otwartym pulpicie zdalnym jest to szczególnie groźne**: klient RDP
+> przekazuje naciśnięcia klawiszy do zdalnej maszyny, więc test potrafi pisać
+> i kasować po drugiej stronie połączenia. Zdarzyło się raz — stąd kontrola,
+> która wykrywa uruchomionego klienta (`mstsc`, `AnyDesk`, `TeamViewer`,
+> Citrix, VNC) i przerywa. Świadome obejście: flaga `--i-know-what-i-am-doing`.
+
+Test używa **własnych triggerów `/qa*`** i osobnego katalogu danych, więc może
+działać obok uruchomionej instancji użytkownika, nie ruszając jego bazy.
 
 Wynik ląduje w `tests/e2e-wynik.txt` razem z logiem aplikacji.
 Wariant `:packaged` sprawdza dodatkowo, czy binarki natywne poprawnie wyszły
@@ -373,11 +411,23 @@ ten plik, nie konsolę.
 `Promise<void>`. Nie ma wariantu synchronicznego. Starsze przykłady z sieci
 (i pamięć modeli) pokazują wersję synchroniczną — nie działa.
 
-### 10.4 Triggery tylko ASCII
+### 10.4 `window.prompt()` nie działa w Electronie
+
+Electron **nie implementuje** `window.prompt()` — w binarce siedzi wprost
+komunikat `prompt() is not supported.`. Wywołanie nie pokazuje żadnego okna
+i nie zwraca wartości, więc przycisk, który na nim polega, **cicho nic nie
+robi**. Tak było z „Nowy folder" i ze zmianą nazwy folderu do wersji 0.1.4.
+
+`alert()` i `confirm()` działają, ale i tak nie używamy ich w tym projekcie —
+blokują proces renderera i wyglądają obco. Każde pytanie do użytkownika
+zadajemy **własnym polem w interfejsie**: pole tekstowe z przyciskami
+„Dodaj”/„Anuluj”, obsługa Enter i Escape.
+
+### 10.5 Triggery tylko ASCII
 
 Patrz 4.2. Polskie znaki w triggerze nie zadziałają. W treści snippetu — tak.
 
-### 10.5 CapsLock po starcie aplikacji
+### 10.6 CapsLock po starcie aplikacji
 
 Stan CapsLocka jest śledzony od momentu startu aplikacji przez przechwytywanie
 jego naciśnięć. Jeśli CapsLock był włączony **zanim** aplikacja wstała,
@@ -385,7 +435,7 @@ jego naciśnięć. Jeśli CapsLock był włączony **zanim** aplikacja wstała,
 Dotyczy tylko triggerów z `matchCase: true` — domyślnie wielkość liter nie ma
 znaczenia, więc problem się nie ujawnia.
 
-### 10.6 Formularz pól a focus
+### 10.7 Formularz pól a focus
 
 Mechanizm opisany w 4.6. Jeśli mimo to tekst trafia w złe miejsce, podnieś
 `REFOCUS_DELAY` w `engine.ts` (domyślnie 220 ms) — na wolniejszych maszynach
@@ -393,7 +443,7 @@ i w aplikacjach z własnym zarządzaniem focusem system potrzebuje więcej czasu
 Log w `%APPDATA%/snippety/log.txt` pokazuje wprost, do którego okna poszło
 wklejenie.
 
-### 10.7 Spacja w ścieżce projektu
+### 10.8 Spacja w ścieżce projektu
 
 Katalog nazywa się `Aplikacja snippety`. Część narzędzi CLI (node-gyp,
 niektóre skrypty npm) źle znosi spacje w ścieżce. Jeśli coś się wywala
@@ -403,7 +453,7 @@ w nietypowy sposób, to jest pierwszy podejrzany.
 
 ## 11. Stan projektu
 
-**Wersja 0.1.3.** Działa: rozwijanie triggerów w dwóch trybach, placeholdery
+**Wersja 0.1.4.** Działa: rozwijanie triggerów w dwóch trybach, placeholdery
 z datami i schowkiem, pola do wypełnienia (tekst / wieloliniowe / lista),
 znacznik kursora, okno szybkiego wyboru, foldery, zasobnik, autostart,
 eksport i import, znacznik wersji w pasku, instalator NSIS + wersja portable.
@@ -411,8 +461,10 @@ eksport i import, znacznik wersji w pasku, instalator NSIS + wersja portable.
 Zweryfikowane w tej wersji:
 
 - parser placeholderów — 29 testów, `npm test`
-- **rozwijanie end-to-end w Notatniku** — `npm run test:e2e`, trzy przypadki:
-  prosty trigger, znacznik kursora, formularz pól z powrotem focusu
+- **rozwijanie end-to-end w Notatniku** — `npm run test:e2e`, cztery przypadki:
+  prosty trigger, znacznik kursora, formularz pól z powrotem focusu oraz
+  regresja schowka (wartość kontrolna musi wrócić, a w polu ma wylądować
+  snippet, nie zawartość schowka)
 - to samo na wersji spakowanej — `npm run test:e2e:packaged`
 - start i zatrzymanie hooka klawiatury bez wycieku procesu
 - wygląd wszystkich trzech okien

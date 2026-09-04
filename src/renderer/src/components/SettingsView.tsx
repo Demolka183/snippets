@@ -39,6 +39,8 @@ export function SettingsView({
   const [info, setInfo] = useState<{ version: string; paths: { snippets: string } } | null>(null)
   const [recording, setRecording] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  /** Folder w trakcie zmiany nazwy. `null` = nic nie edytujemy. */
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null)
 
   useEffect(() => {
     void window.api.app.info().then(setInfo)
@@ -46,6 +48,19 @@ export function SettingsView({
 
   const patch = async (changes: Partial<Settings>): Promise<void> => {
     onChange(await window.api.settings.update(changes))
+  }
+
+  /**
+   * Nazwa idzie z wlasnego pola, nie z `window.prompt` - Electron go nie
+   * implementuje ("prompt() is not supported"), wiec przycisk nic nie robil.
+   */
+  const commitRename = async (): Promise<void> => {
+    if (!renaming) return
+    const name = renaming.name.trim()
+    if (!name) return
+    await window.api.folders.rename(renaming.id, name)
+    setRenaming(null)
+    onFoldersChanged()
   }
 
   const exportFile = async (): Promise<void> => {
@@ -197,28 +212,56 @@ export function SettingsView({
             <ul className="folder-list">
               {folders.map((folder) => (
                 <li key={folder.id}>
-                  <span>{folder.name}</span>
+                  {renaming?.id === folder.id ? (
+                    <input
+                      type="text"
+                      autoFocus
+                      value={renaming.name}
+                      onChange={(e) => setRenaming({ id: folder.id, name: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          void commitRename()
+                        }
+                        if (e.key === 'Escape') setRenaming(null)
+                      }}
+                    />
+                  ) : (
+                    <span>{folder.name}</span>
+                  )}
                   <span className="folder-actions">
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      onClick={async () => {
-                        const name = window.prompt('Nowa nazwa folderu:', folder.name)?.trim()
-                        if (!name) return
-                        await window.api.folders.rename(folder.id, name)
-                        onFoldersChanged()
-                      }}
-                    >
-                      Zmień nazwę
-                    </button>
-                    <button
-                      className="btn btn-danger btn-sm"
-                      onClick={async () => {
-                        await window.api.folders.remove(folder.id)
-                        onFoldersChanged()
-                      }}
-                    >
-                      Usuń
-                    </button>
+                    {renaming?.id === folder.id ? (
+                      <>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          disabled={!renaming.name.trim()}
+                          onClick={() => void commitRename()}
+                        >
+                          Zapisz
+                        </button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => setRenaming(null)}>
+                          Anuluj
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => setRenaming({ id: folder.id, name: folder.name })}
+                      >
+                        Zmień nazwę
+                      </button>
+                    )}
+                    {renaming?.id === folder.id ? null : (
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={async () => {
+                          await window.api.folders.remove(folder.id)
+                          onFoldersChanged()
+                        }}
+                      >
+                        Usuń
+                      </button>
+                    )}
                   </span>
                 </li>
               ))}
