@@ -1,5 +1,11 @@
 # Snippety
 
+> ## [Pobierz instalator](https://github.com/Demolka183/snippets/releases/latest)
+>
+> **Nie pobieraj zielonym przyciskiem „Code → Download ZIP”.** To kod źródłowy —
+> nie ma w nim programu do uruchomienia. Instalator jest w sekcji **Releases**,
+> pod linkiem powyżej, jako plik `Snippety-Setup-X.Y.Z.exe`.
+
 Aplikacja na Windows do powtarzalnych tekstów. Wpisujesz `/przywitanie`
 w dowolnym polu — w mailu, na czacie, w formularzu CRM — a aplikacja w tym
 miejscu podmienia to na przygotowany wcześniej szablon.
@@ -14,8 +20,9 @@ na zewnątrz, to strona z wydaniami, gdy sam klikniesz numer wersji.
 
 ## Pobranie i instalacja
 
-1. Wejdź w **[Releases](https://github.com/Demolka183/snippets/releases)**
-   i pobierz `Snippety-Setup-X.Y.Z.exe`.
+1. Wejdź w **[Releases](https://github.com/Demolka183/snippets/releases/latest)**
+   i w sekcji **Assets** pobierz `Snippety-Setup-X.Y.Z.exe`.
+   To pojedynczy plik, nie archiwum — nic nie trzeba rozpakowywać.
 2. Uruchom pobrany plik.
 3. Windows pokaże niebieskie okno **„System Windows ochronił Twój komputer”**.
    To normalne — aplikacja nie ma certyfikatu podpisu kodu (kosztuje kilkaset
